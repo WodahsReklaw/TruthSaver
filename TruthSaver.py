@@ -195,6 +195,12 @@ def download_video(downloadEntry):
         diff_str = global_diff_name[downloadEntry[3]+3]
     videoName = (downloadEntry[0] + '-' + global_stage_name[downloadEntry[2]] 
                   + '-' + diff_str + '-'+ str(downloadEntry[4]))
+    #check if video exists, could wildcard with glob or something
+    if (os.path.isfile(player_path + '/' + videoName + '.mp4')  or 
+        os.path.isfile(player_path + '/' + videoName + '.webm') or
+        os.path.isfile(player_path + '/' + videoName + '.3gp')):
+        print(videoName + ' already downloaded.')
+        return 1
     ytLink = get_yt_link(downloadEntry[1])
     if (len(ytLink) == 0):
         print ('Error: Invalid video link for time.'
@@ -223,9 +229,7 @@ def download_video(downloadEntry):
     #Gets the highest qualtiy video
     ytFilter = ytFilter[-1]
     # Cluster fuck of downloading the video
-    #First check if video exists
-    if os.path.isfile(palyer_path + '/' + videoName):
-        return 1
+
     #Change filename and download
     try:
         ytFilter.filename = videoName
