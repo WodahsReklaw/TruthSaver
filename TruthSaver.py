@@ -19,7 +19,7 @@ import pickle
 import re
 import requests
 import sys as Sys
-from BeautifulSoup import BeautifulSoup
+from bs4 import BeautifulSoup
 from pytube import YouTube
 
 #some global var probs should replace or get from a config file
@@ -144,7 +144,7 @@ def update_download_list(filename, url):
         #      str(sizeStageData[0] + sizeStageData[1] + sizeStageData[2]) 
         #      +' times found for ' + global_stage_name[stage])
         for diff in range (0, 3):
-            for i in range(0, sizeStageData[diff]):
+            for i in range(0, int(sizeStageData[diff])):
                 #print(str(int(listStageData[diff][i*6 + 5]) == 2 ) + ' & ' +
                  #     str(not is_in_list(listToDownload, listStageData[diff][i*6 + 3])))
                 if (int(listStageData[diff][i*6 + 5]) == 2 
@@ -172,7 +172,7 @@ def get_yt_link(levelID):
     except:
         print('Error loading page: ' + timePage.url + ' throwing exception.')
         raise
-    soupTimePage = BeautifulSoup(timePage.content)
+    soupTimePage = BeautifulSoup(timePage.content, "html.parser")
     link = soupTimePage(href=re.compile('watch?'))[0].get('href')
     return link
 
