@@ -19,8 +19,12 @@ import pickle
 import re
 import requests
 import sys as Sys
-from bs4 import BeautifulSoup
 from pytube import YouTube
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    from BeautifulSoup import BeautifulSoup
 
 #some global var probs should replace or get from a config file
 global_url_rankings = 'http://rankings.the-elite.net/'
