@@ -202,7 +202,7 @@ def download_video(downloadEntry):
             raise
     diff_str = str(global_diff_name[downloadEntry[3]])
     if downloadEntry[2] > 20:
-        diff_str = global_diff_name[downloadEntry[3]+2]
+        diff_str = global_diff_name[downloadEntry[3]+3]
     videoName = (downloadEntry[0] + '-' + global_stage_name[downloadEntry[2]] 
                   + '-' + diff_str + '-'+ str(downloadEntry[4]))
     ytLink = get_yt_link(downloadEntry[1])
