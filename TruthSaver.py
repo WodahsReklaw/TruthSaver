@@ -130,11 +130,11 @@ def update_download_list(filename, url):
         # print("Page: " + global_url_rankings + 'ajax/stage/' 
         #      + str(stage) + ' loaded successfully.')
         # Parse data into diff 0 = agent, 1 = sa, 2 = 00a
-        listParse = page.text.strip('[').split(']')
+        listParse = (page.text.strip('[')).split(']')
         listStageData = [0,0,0]
         listStageData[0] = listParse[0].split(',')
-        listStageData[1] = listParse[1].split(',')
-        listStageData[2] = listParse[2].split(',')
+        listStageData[1] = (listParse[1].lstrip(',').lstrip('[')).split(',')
+        listStageData[2] = (listParse[2].lstrip(',').lstrip('[')).split(',')
 
         sizeStageData = [0, 0, 0]
         sizeStageData[0] = len(listStageData[0]) / 6
@@ -145,8 +145,12 @@ def update_download_list(filename, url):
         #      +' times found for ' + global_stage_name[stage])
         for diff in range (0, 3):
             for i in range(0, sizeStageData[diff]):
-                #print(str(int(listStageData[diff][i*6 + 5]) == 2 ) + ' & ' +
-                 #     str(not is_in_list(listToDownload, listStageData[diff][i*6 + 3])))
+                #if (diff == 2):
+                 #   print(str(listStageData[diff][i*6]) + ' ' + str(listStageData[diff][i*6+1])
+                 #         + str(listStageData[diff][i*6+2]) + ' ' + str(listStageData[diff][i*6 + 3])
+                 #         + str(listStageData[diff][i*6+4]) + ' ' + str(listStageData[diff][i*6 + 5]))
+                 #   print(str(int(listStageData[diff][i*6 + 5]) == 2 ) + ' & ' +
+                 #         str(not is_in_list(listToDownload, listStageData[diff][i*6 + 3])))
                 if (int(listStageData[diff][i*6 + 5]) == 2 
                     and not (is_in_list(listToDownload, int(listStageData[diff][i*6 + 3])))):
                     listToDownload.append(
@@ -173,8 +177,11 @@ def get_yt_link(levelID):
         print('Error loading page: ' + timePage.url + ' throwing exception.')
         raise
     soupTimePage = BeautifulSoup(timePage.content)
-    link = soupTimePage(href=re.compile('watch?'))[0].get('href')
-    return link
+    link = soupTimePage(href=re.compile('watch?'))
+    if len(link) == 0:
+        print('Error: No youtube link found for time ' + timePage.url)
+        return []
+    return link[0].get('href')
 
 # Uses the YT link to download the best quality MP4, or other format
 def download_video(downloadEntry):
@@ -198,8 +205,12 @@ def download_video(downloadEntry):
         diff_str = global_diff_name[downloadEntry[3]+2]
     videoName = (downloadEntry[0] + '-' + global_stage_name[downloadEntry[2]] 
                   + '-' + diff_str + '-'+ str(downloadEntry[4]))
+    ytLink = get_yt_link(downloadEntry[1])
+    if (len(ytLink) == 0):
+        print ('Error: Invalid video link for time.'
+               +'Could be a twitch or other video. ')
+        return 0
     try:
-        ytLink = get_yt_link(downloadEntry[1])
         yt = YouTube(ytLink)
     except Exception as ex:
         template = "Error exception of type {0} occured.\n{1}"
@@ -207,16 +218,20 @@ def download_video(downloadEntry):
         print ('Skipping Entry for ' + str(videoName))
         return 0
 
-    # Attempt to get a Mp4
-
-    ytFilter = yt.filter('mp4')[-1]
-    if ytFilter == []:
-        ytFilter = yt.filter('webm')[-1]
-        if ytFilter == []:
-            print("Error no video found: " + downloadEntry[0] + ' time ' + 
-                  downloadEntry[1] + 'skipped.')
-            return 0
-
+    # Attempt to get a Mp4/webm/3gp
+    #ytFilter = yt.filter('mp4')
+    if (yt.filter('mp4') != []):
+        ytFilter = yt.filter('mp4')
+    elif (yt.filter('webm') != []):
+        ytFilter = yt.filter('webm')
+    elif (yt.filter('3gp') != []):
+        ytFilter = yt.filter('3gp')
+    else:
+        print("Error no video found: " + downloadEntry[0] + ' time ' + 
+              downloadEntry[1] + 'skipped.')
+        return 0
+    #Gets the highest qualtiy video
+    ytFilter = ytFilter[-1]
     # Cluster fuck of downloading the video
     try:
         ytFilter.filename = videoName
