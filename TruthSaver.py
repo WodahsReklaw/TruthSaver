@@ -64,8 +64,8 @@ def printProgress (iteration, total, prefix = '', suffix = '', decimals = 1, bar
     if iteration == total:
         print("\n")
 
+# Gets saved list from file
 def get_saved_list(fileName):
-
     returnObj = []
     try:
         binfile = open(fileName,'rb')
@@ -76,12 +76,6 @@ def get_saved_list(fileName):
         returnObj = pickle.load(binfile)
         print('File ' + fileName + ' properly loaded!\n')
         print( 'Fetched file is of size: '+ str( len(returnObj)))
-       # print('Printing 0th entry' + returnObj[0][0] + str(returnObj[0][1]) +
-       #       str(returnObj[0][2]) + str(returnObj[0][3]) + str(returnObj[0][4]) + 
-       #       str(returnObj[0][5]))
-       # print('Printing 1th entry' + returnObj[1][0] + str(returnObj[1][1]) +
-       #       str(returnObj[1][2]) + str(returnObj[1][3]) + str(returnObj[1][4]) + 
-       #       str(returnObj[1][5]))
         return returnObj
         binfile.close()
     except:
@@ -131,8 +125,7 @@ def update_download_list(filename, url):
             print("Error loading page: " + global_url_rankings 
                   + '/ajax/stage/' + str(stage))
             raise
-        # print("Page: " + global_url_rankings + 'ajax/stage/' 
-        #      + str(stage) + ' loaded successfully.')
+
         # Parse data into diff 0 = agent, 1 = sa, 2 = 00a
         listParse = (page.text.strip('[')).split(']')
         listStageData = [0,0,0]
@@ -144,23 +137,19 @@ def update_download_list(filename, url):
         sizeStageData[0] = len(listStageData[0]) / 6
         sizeStageData[1] = len(listStageData[1]) / 6
         sizeStageData[2] = len(listStageData[2]) / 6
-        #print('Total of ' +  
-        #      str(sizeStageData[0] + sizeStageData[1] + sizeStageData[2]) 
-        #      +' times found for ' + global_stage_name[stage])
+
         for diff in range (0, 3):
             for i in range(0, int(sizeStageData[diff])):
-                #print(str(int(listStageData[diff][i*6 + 5]) == 2 ) + ' & ' +
-                 #     str(not is_in_list(listToDownload, listStageData[diff][i*6 + 3])))
                 if (int(listStageData[diff][i*6 + 5]) == 2 
                     and not (is_in_list(listToDownload, int(listStageData[diff][i*6 + 3])))):
                     listToDownload.append(
                         [ listStageData[diff][i*6+0].strip('\"').replace(' ', '_'),
                           int(listStageData[diff][i*6+3]), stage, diff,
                           int(listStageData[diff][i*6+4]), 0 ] )
-                    #print("!should be added")
                     append_count += 1
         printProgress(stage, iStageNum, prefix='Checking for new times: ',
                       suffix='Complete', barLength = 20)
+
     print('Update finished, added '+ str(append_count)+ ' new videos to queue.')
     save_list(listToDownload, filename)
     print('Saved updated list')
@@ -176,18 +165,13 @@ def get_yt_link(levelID):
     except:
         print('Error loading page: ' + timePage.url + ' throwing exception.')
         raise
-<<<<<<< HEAD
-    soupTimePage = BeautifulSoup(timePage.content)
+
+    soupTimePage = BeautifulSoup(timePage.content, "html.parser")
     link = soupTimePage(href=re.compile('watch?'))
     if len(link) == 0:
         print('Error: No youtube link found for time ' + timePage.url)
         return []
     return link[0].get('href')
-=======
-    soupTimePage = BeautifulSoup(timePage.content, "html.parser")
-    link = soupTimePage(href=re.compile('watch?'))[0].get('href')
-    return link
->>>>>>> ee66c6cb53a91ddd3c05815d964adba5162883ae
 
 # Uses the YT link to download the best quality MP4, or other format
 def download_video(downloadEntry):
@@ -215,14 +199,14 @@ def download_video(downloadEntry):
     if (len(ytLink) == 0):
         print ('Error: Invalid video link for time.'
                +'Could be a twitch or other video. ')
-        return 0
+        return -2
     try:
         yt = YouTube(ytLink)
     except Exception as ex:
         template = "Error exception of type {0} occured.\n{1}"
         print(template.format(type(ex), ex.args))
         print ('Skipping Entry for ' + str(videoName))
-        return 0
+        return -1
 
     # Attempt to get a Mp4/webm/3gp
     #ytFilter = yt.filter('mp4')
@@ -239,6 +223,10 @@ def download_video(downloadEntry):
     #Gets the highest qualtiy video
     ytFilter = ytFilter[-1]
     # Cluster fuck of downloading the video
+    #First check if video exists
+    if os.path.isfile(palyer_path + '/' + videoName):
+        return 1
+    #Change filename and download
     try:
         ytFilter.filename = videoName
         ytFilter.download(player_path)
@@ -247,7 +235,8 @@ def download_video(downloadEntry):
         print(template.format(type(ex), ex.args))
         print ('Skipping Entry for ' + str(downloadEntry[0]) +
                ' time' + str(downloadEntry[1]) )
-        return 0
+        print ('Video might have been deleted or otherwise unaccessable.')
+        return -1
     print('Downloaded ' + videoName + ' to ' + player_path + "\033[K")
     return 1
 
@@ -260,6 +249,9 @@ def main():
     for i in range(0, len(downloadList)):
         if (downloadList[i][5] == 0):
             #Download and mark as saved in list
+            #If an error occured it will be saved as 
+            # -1 for a YT video that is private/deleted/undownloadable
+            # -2 for a link that is of non-youtube type
             downloadList[i][5] = download_video(downloadList[i]) 
             #Savelist
             save_list(downloadList, global_listFile)
