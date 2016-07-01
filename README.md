@@ -7,7 +7,9 @@ and downloads them into folders for each player.
  - pytube
  - requests
  - BeautifulSoup
-of which are all available using pip install <module name>
+
+of which are all available using the built in python pip install <module name>
+If there any bugs please let me know using the issues or a direct message.
 
 ##Credits
 ###Developer

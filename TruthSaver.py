@@ -19,8 +19,12 @@ import pickle
 import re
 import requests
 import sys as Sys
-from BeautifulSoup import BeautifulSoup
 from pytube import YouTube
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    from BeautifulSoup import BeautifulSoup
 
 #some global var probs should replace or get from a config file
 global_url_rankings = 'http://rankings.the-elite.net/'
@@ -144,13 +148,9 @@ def update_download_list(filename, url):
         #      str(sizeStageData[0] + sizeStageData[1] + sizeStageData[2]) 
         #      +' times found for ' + global_stage_name[stage])
         for diff in range (0, 3):
-            for i in range(0, sizeStageData[diff]):
-                #if (diff == 2):
-                 #   print(str(listStageData[diff][i*6]) + ' ' + str(listStageData[diff][i*6+1])
-                 #         + str(listStageData[diff][i*6+2]) + ' ' + str(listStageData[diff][i*6 + 3])
-                 #         + str(listStageData[diff][i*6+4]) + ' ' + str(listStageData[diff][i*6 + 5]))
-                 #   print(str(int(listStageData[diff][i*6 + 5]) == 2 ) + ' & ' +
-                 #         str(not is_in_list(listToDownload, listStageData[diff][i*6 + 3])))
+            for i in range(0, int(sizeStageData[diff])):
+                #print(str(int(listStageData[diff][i*6 + 5]) == 2 ) + ' & ' +
+                 #     str(not is_in_list(listToDownload, listStageData[diff][i*6 + 3])))
                 if (int(listStageData[diff][i*6 + 5]) == 2 
                     and not (is_in_list(listToDownload, int(listStageData[diff][i*6 + 3])))):
                     listToDownload.append(
@@ -176,12 +176,18 @@ def get_yt_link(levelID):
     except:
         print('Error loading page: ' + timePage.url + ' throwing exception.')
         raise
+<<<<<<< HEAD
     soupTimePage = BeautifulSoup(timePage.content)
     link = soupTimePage(href=re.compile('watch?'))
     if len(link) == 0:
         print('Error: No youtube link found for time ' + timePage.url)
         return []
     return link[0].get('href')
+=======
+    soupTimePage = BeautifulSoup(timePage.content, "html.parser")
+    link = soupTimePage(href=re.compile('watch?'))[0].get('href')
+    return link
+>>>>>>> ee66c6cb53a91ddd3c05815d964adba5162883ae
 
 # Uses the YT link to download the best quality MP4, or other format
 def download_video(downloadEntry):
