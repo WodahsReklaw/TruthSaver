@@ -27,14 +27,14 @@ DOWNLOAD_RECORD = './downloadData.pkl'
 #Standard path to videos
 VID_PATH = './vids/'
 
-STAGE_GE = [
+STAGES_GE = [
     (1, 'dam'),  (2, 'facility'), (3, 'runway'), (4, 'surface1'), 
     (5, 'bunker1'), (6, 'silo'), (7, 'frigate'), (8,'surface2'), 
     (9, 'bunker2'), (10, 'statue'), (11, 'archives'), (12, 'streets'),
     (13, 'depot'), (14, 'train'), (15, 'jungle'), (16, 'control'), 
     (17, 'caverns'), (18, 'cradle'), (19, 'aztec'), (20, 'egypt')
 ]
-STAGE_PD= [
+STAGES_PD= [
     (21, 'defection'), (22, 'investigation'), (23, 'extraction'), 
     (24, 'villa'), (25, 'chicago'), (26, 'g5'), (27, 'infiltration'), 
     (28, 'rescue'), (29, 'escape'), (30, 'air-base'), (31, 'af1'), 
@@ -87,23 +87,48 @@ class TruthSaver:
         try:
             page.raise_for_status()
         except:
-            print("Error loading page: " + url)
+            pint("Error loading page: " + url)
             raise
         return page.json()
+
+    def get_ltk_level_data(self, url):
+        """Parses LTK HTML for stage data similar in format to json"""
+        page = requests.get(url)
+        try:
+            page.raise_for_status()
+        except:
+            print("Error loading page: " + url)
+            raise
+        soup = BeautifulSoup(page.text, "html.parser")
+        table_list = soup.find_all('table')
+        for table in table_list:
+            tr_list = table.find_all('tr')
+            for tr in tr_list:
+                if tr.find(class_='video-link'):
+                    player_name = tr.find(class_='user').text
+                    time = tr.find(class_='time').text
+                    time_page = tr.find(class_='time').get('href')
+
+        
+
+    def getTimesWithVids(level_data):
+        """Gets level data, slices it by time, and keeps ones with vids"""
+        ret = []
+        for i in range(0, len(level_data), 6):
+            if level_data[i+5] > 0:
+                ret.append(level_data[i:i+6])
+        return ret
 
     def get_ge_list(self):
         """Gets download list for ge from the web"""
         ge_list = []
-        for stage in STAGE_GE:
-            url = str(BASE_URL + 'ajax/stage/' + str(stage[0]))
-            reg_stage_data = get_page_json_obj(url)
-            for stage_dif in reg_stage_data:
-                
-                
-                
-        
-            
-        
+        for stage in STAGES_GE:
+            url_regular = str(BASE_URL + 'ajax/stage/' + str(stage[0]))
+            #Get Regular mode data first
+            stage_data_normal = get_page_json_obj(url_regular)
+            for level_data in stage_data_normal:
+                ge_list.extend(getTimesWithVids(level_data))
+            url_ltk = str(BASE_URL + 'goldeneye/ltk' + str(stage[1]))
 
     def update_download_list(self)
         """Updates the entire times_list with new times"""
