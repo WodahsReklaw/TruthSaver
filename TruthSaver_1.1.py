@@ -1,179 +1,291 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Saves all videos found on rankings.the-elite.net
+"""Saves all videos found on rankings.the-elite.net"""
 
-This module is designed to handle the automatic downloading of all times that
-have videos on rankings.the-elite.net. The behavior or this script might be
-modified to select a particular player / points threshold / or any other options
-that could be of importance to users of the script.
-
-By: Daniel Coelho 2016
-
-Some information on the datastructures encountered
-The main ranks is populated from a json data structure that is as follows:
-Difficulty:[
-  Agent:[ 'User Name', 'User Url Suffix', 'User ID', 'Time ID', 'Time', 'Vid',
-          'Next user', ... etc
-  ]
-  Sa:[ Same stuff
-  ]
-  00A[ Same stuff
-  ]
-]
-
-For LTK the infromation is encoded in html in the table and not easily
-obtainable through a json dump and has to be parsed seprately.
-
-All times are stored in a dictonary with the following structure.
-
-  Dictonary of all times {                                                       
-    time_id:(time_id, player, level, diff, time (seconds), status)  
-  }
-"""
+import collections
 import os
-import re
-import sys
 import pickle
-import requests
 
-from printprogress import print_progress
+import requests
 from pytube import YouTube
 from bs4 import BeautifulSoup
 
-#Base URL for the rankings
+# Base URL for the rankings
 BASE_URL = 'http://rankings.the-elite.net/'
+AJAX_ENDPOINT = 'ajax/stage/'
 
-#File which records which videos have been downloaded
+# Standard download path
+DEFAULT_PATH = './vids/'
+
+# File which records which videos have been downloaded
 DOWNLOAD_RECORD = './downloadData.pkl'
 
-#Standard path to videos
-VID_PATH = './vids/'
-GAMES = { "ge":"goldeneye",
-          "pd":"perfectdark"
-}
+GAMES = ["goldeneye", "perfect-dark"]
+
+# Dictonary of Goldeneye and Perfect-Dark levels
 STAGES = {
-    "ge":[
-        (1, 'dam'),  (2, 'facility'), (3, 'runway'), (4, 'surface1'), 
-        (5, 'bunker1'), (6, 'silo'), (7, 'frigate'), (8,'surface2'), 
+    "goldeneye":[
+        (1, 'dam'), (2, 'facility'), (3, 'runway'), (4, 'surface1'),
+        (5, 'bunker1'), (6, 'silo'), (7, 'frigate'), (8, 'surface2'),
         (9, 'bunker2'), (10, 'statue'), (11, 'archives'), (12, 'streets'),
-        (13, 'depot'), (14, 'train'), (15, 'jungle'), (16, 'control'), 
+        (13, 'depot'), (14, 'train'), (15, 'jungle'), (16, 'control'),
         (17, 'caverns'), (18, 'cradle'), (19, 'aztec'), (20, 'egypt')
-    ]
-    "pa":[
-        (21, 'defection'), (22, 'investigation'), (23, 'extraction'), 
-        (24, 'villa'), (25, 'chicago'), (26, 'g5'), (27, 'infiltration'), 
-        (28, 'rescue'), (29, 'escape'), (30, 'air-base'), (31, 'af1'), 
-        (32, 'crash-site'), (33, 'pelagic'), (34, 'deep-sea'),(35, 'ci'),
+    ],
+    "perfect-dark":[
+        (21, 'defection'), (22, 'investigation'), (23, 'extraction'),
+        (24, 'villa'), (25, 'chicago'), (26, 'g5'), (27, 'infiltration'),
+        (28, 'rescue'), (29, 'escape'), (30, 'air-base'), (31, 'af1'),
+        (32, 'crash-site'), (33, 'pelagic'), (34, 'deep-sea'), (35, 'ci'),
         (36, 'attack-ship'), (37, 'skedar-ruins'), (38, 'mbr'),
-        (39, 'maian-sos'), (40,'war')
+        (39, 'maian-sos'), (40, 'war')
     ]
 }
+
 #MODES
 MODES = {
-    "ge": [
+    "goldeneye": [
         'Agent', 'SA', '00A', 'LTK', 'DLTK'
-    ]
-    "pa":[
+    ],
+    "perfect-dark":[
         'Agent', 'SA', 'PA', 'LTK', 'DLTK'
     ]
 }
-class TruthSaver:
-    """Downloads all videos from ranks in a nice way
 
-  For the main ranks it downloads the JSON containing all the times for each
-  level and downloads them.
 
-  For LTK and any other functionality the level pages are scraped for that info
+# TIME_ENTRY
+class TimeEntry(collections.namedtuple('TimeEntry',
+                                       ['url', 'time_id', 'player',
+                                        'mode', 'stage', 'time', 'status'])):
+    """TimeEntry is a container for all information needed for a ge time."""
+
+    def vid_path(self):
+        """Returns a local path for where videos should be downloaded."""
+        local_dir = DEFAULT_PATH + self.player
+        vid_name = (self.player + ' ' + self.stage
+                    + ' ' +  self.mode + sec_to_ge_time(self.time))
+        return os.path.join(local_dir, vid_name)
+
+
+
+def ge_time_to_sec(time_str):
+    """Converts time MM:SS to just seconds."""
+    t_l = time_str.split(':')
+    return 60*t_l[0] + t_l[1]
+
+
+def sec_to_ge_time(time_sec):
+    """Converts time from number of seconds to MM:SS."""
+    return str(int(time_sec / 60)) + ':' + str(time_sec%60)
+
+
+class TruthSaver(object):
+    """Manages the saved entries of times to download, and downloading them.
+
+    For the main ranks it fetches the JSON available at an ajax endpoint per
+    stage, and converts it into a TimeEntry. For LTK each stage has to be
+    opened up and parsed with Beautifulsoup converting the data on the page
+    into a TimeEntry.
+
+    self.saved_entries is a dictonary of TimeEntrys with the keys equal to
+    TimeEntry.url which is gaurnteed to be unqiue.
+
+    self.local_path is the path where player folders live and in the player
+    folders where the times are downloaded.
   """
-    #Dictonary of all times
-    #time_id:(time_id, player, level, diff, time (seconds), status)
-    #LTK times are negative
-    times_dict = dict()
 
-    def get_saved_list(self, filename):
+    def __init__(self):
+        """Initalizes self.local_path and self.saved_entries."""
+        self.local_path = DEFAULT_PATH
+        try:
+            self.saved_entries = self.get_saved_list()
+        except (IOError, pickle.UnpicklingError) as e:
+            print('Error loading file. Starting with an empty list.')
+            self.saved_entries = {}
+
+    def get_saved_list(self):
         """Given full path return times_list saved as a pickle file"""
+
         try:
-            binfile = open(filename, 'rb')
-        except IOError:
-            print('File ' + fileName + ' assuming a new download list.\n')
-            return ret
+            binfile = open(self.local_path, 'rb')
+        except IOError as e:
+            print('IOError: for file %s' % self.local_path)
+            raise e
         try:
-            times_list = pickle.load(binfile)
-        except:
-            print('Failed Loading file. It might be corrupted.')
-            raise
-        print('File ' + fileName + ' properly loaded!\n')
-        print('Fetched file is of size: ' + str(len(returnObj)))
+            times_dict = pickle.load(binfile)
+        except pickle.UnpicklingError as e:
+            print('UnpicklingError: pickle file %s failed to open.'
+                  % self.local_path)
+            raise e
         binfile.close()
-        return ret
-    def ge_time_to_sec(time_str):
-        t_l = time_str.split(':')
-        return 60*t_l[0] + t_l[1]
-    def sec_to_ge_time(time_sec):
-        return str(int(time_sec / 60)) + ':' + str(time_sec%60)
+        # TODO(dc): Change print statements to logging
+        print('File %s properly loaded!' % self.local_path)
+        print('Fetched file is of size: ' + str(len(times_dict)))
+        return times_dict
 
-    def get_page_json_obj(self, url):
-        """Gets the object from the json server
-        
-        JSON object is formatted as the following
-        'player' (str), 'URL' (str), TimeID (int), Time (seconds),  status (int)
-        where status = 0,1,2 where 2 == video
-        """
-        page = requests.get(url)
+    #saves the list
+    def save_entries(self):
+        """Save the currnet self.saved_entries to a pickle file."""
         try:
-            page.raise_for_status()
-        except:
-            pint("Error loading page: " + url)
+            binfile = open(self.local_path,'wb')
+        except IOError:
+            print('Error writing download list.')
             raise
-        return page.json()
-    def timelist_to_record(self, times_list, stage_name, mode_name, status):
-        ret = dict()
-        for time in times_list:
-            ret[time[3]] =(time[3], time[0], stage[1], mode, time[4])
-        return ret
+        pickle.dump(self.saved_entries, binfile)
+        binfile.close()
+        return
 
-    def get_ltk_level_data(self, url, stage):
-        """Parses LTK HTML for stage data similar in format to json"""
+    def stage_data_to_times(self, stage, stage_data):
+        """Returns a dictonary of regular times with videos for a stage."""
+        times = {}
+
+        if stage[0] < 21:
+            game = GAMES[0]
+        else:
+            game = GAMES[1]
+
+        # Level data is ordered as follows,
+        #   Mode (agent, sa, 00a)
+        #     Time(Player_Name, FirstN+LastN, Player_ID,
+        #          Time_ID, Time_sec, vid_comment_status*)
+        # Comment vid_comment_status 0 = None, 1 = Comment, 2 = Video
+        for mode, player_times in zip(MODES[game][:2], stage_data):
+            for t in player_times:
+                if t[5] == 2:
+                    time_id = t[3]
+                    time_url = BASE_URL + '~' + t[1] + '/time/' + time_id
+                    entry = TimeEntry(url=time_url, time_id=time_id,
+                                      player=t[0], mode=mode, stage=stage[1],
+                                      time=t[4], status=0)
+                    times[entry.url] = entry
+        return times
+
+    def get_ltk_level_data(self, stage):
+        """Returns up-to-date (D)LTK times with videos for a stage."""
+
+        if stage[0] < 21:
+            game = GAMES[0]
+        else:
+            game = GAMES[1]
+
+        url = BASE_URL + game + '/ltk/stage/' + stage[1]
         page = requests.get(url)
+
         try:
             page.raise_for_status()
         except:
             print("Error loading page: " + url)
             raise
-        ltk_dict = dict() 
+
+        ltk_times = {}
+        game = url.split('/')[-4]
+
+        # Parse the HTML level page for all the player times with videos
         soup = BeautifulSoup(page.text, "html.parser")
-        table_list = soup.find_all('table')
-        for i, table in enumerate(table_list):
-            tr_list = table.find_all('tr')
-            for tr in tr_list:
+        for table, mode in zip(soup.find_all('table'), MODES[game][3:]):
+            for tr in table.find_all('tr'):
                 if tr.find(class_='video-link'):
-                    player_name = tr.find(class_='user').text
+                    player = tr.find(class_='user').text
                     time_tag = tr.find(class_='time')
-                    time_id = int(time_tag["href"].split('/')[3])
+                    time_url = BASE_URL + time_tag['href']
+                    time_id = int(time_url.split('/')[-1])
                     time = ge_time_to_sec(time_tag.text)
-                    ltk_list[-time_id]=( time_id, player_name, stage,
-                                         diff, time, 0)
-        return ltk_list
-    def getTimesWithVids(level_data):
-        """Gets level data, slices it by time, and keeps ones with vids"""
-        ret = []
-        for i in range(0, len(level_data), 6):
-            if level_data[i+5] > 0:
-                ret.append(level_data[i:i+6])
-        return ret
+                    entry = TimeEntry(url=time_url, time_id=time_id,
+                                      player=player, mode=mode, stage=stage[1],
+                                      time=time, status=0)
+                    ltk_times[entry.url] = entry
+        return ltk_times
 
-    def get_check_list(self):
-        """Gets download list for ge from the web"""
-        check_list = []
-        for key, game_name in GAMES.items():
-            for stage in STAGES[key]:
-                url_regular = str(BASE_URL + 'ajax/stage/' + str(stage[0]))
-                #Get Regular mode data first
-                stage_data_normal = get_page_json_obj(url_regular)
-                for level_data in stage_data_normal:
-                    check_list.extend(getTimesWithVids(level_data))
-                url_ltk = str(BASE_URL + game_name
-                              + '/ltk/stage/'+ str(stage[1]))
+    def get_regular_level_data(self, stage):
+        """Returns dictonary of up to date regular times for a stage."""
 
-    def update_download_list(self)
-        """Updates the entire times_list with new times"""
-        
+        url = BASE_URL + 'ajax/stage/' + stage[1]
+        # TODO(dc): Log page access.
+        response = requests.get(url)
+        try:
+            response.raise_for_status()
+            stage_data = response.json()
+        except ValueError:
+            # TODO(dc): Add a clean exit.
+            # TODO(dc): Add logging.
+            raise
+
+        return self.stage_data_to_times(stage, stage_data)
+
+    def get_all_time_entries(self):
+        """Returns dictonry of all up to date GE/PD times with videos."""
+
+        time_entries = {}
+
+        for game in GAMES:
+            for stage in STAGES[game]:
+                # Regular mode data first
+                time_entries.update(self.get_regular_level_data(stage))
+                # LTK Times
+                time_entries.update(self.get_ltk_level_data(stage))
+        return time_entries
+
+    def get_yt_link(self, time_entry):
+        """Returns youtube link if there is one, raises execptions if not."""
+        response = requests.get(time_entry.url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+        for tag in soup.find_all('a', href=True):
+            if 'YouTube' in tag.text:
+                return tag['href']
+            elif ('Download video' in tag.text
+                  and 'youtu' in tag['href']):
+                return tag['href']
+            elif 'Twitch' in tag.text:
+                raise ValueError('Cannot download twitch video: %s'
+                                 % tag['href'])
+            elif 'Download video' in tag.text:
+                raise ValueError('Manually download video %s'
+                                 % tag['href'])
+
+    def update_download_list(self):
+        """Updates the saved_entries with new times."""
+        current_entries = self.get_all_time_entries()
+
+        for cur_entry_k, cur_entry_v in current_entries.items():
+            if cur_entry_k not in self.saved_entries:
+                self.saved_entries[cur_entry_k] = cur_entry_v
+        self.save_entries()
+
+    def download_yt_video(self, yt_link, time_entry):
+        """Downloads highest quality yt video given the link, and TimeEntry."""
+        vid_dirname, vid_basename = os.path.split(time_entry.vid_path())
+        yt_handle = YouTube(yt_link)
+        if not os.path.isdir(vid_dirname):
+            os.mkdir(vid_dirname)
+        yt_handle.set_filename(vid_basename)
+        # This will download the highest quality video
+        hq_vid = sorted(yt_handle.videos, key=lambda x: x.resolution)[-1]
+        hq_vid.download(vid_dirname)
+        print('Downloaded video: %s' % time_entry.vid_path())
+
+    def download_videos(self, dl_status=0):
+        """Saves all videos with status equal to dl_status."""
+        for time_entry in self.saved_entries.values():
+            if time_entry.status != dl_status:
+                continue
+            try:
+                yt_link = self.get_yt_link(time_entry)
+            except ValueError as e:
+                # TODO(dc): Log exception instead of print
+                print(e)
+                self.saved_entries[time_entry.url] = (
+                    time_entry._replace(status=-1))
+                continue
+            try:
+                self.download_yt_video(yt_link)
+            except (pytube.exception.PytubeError,
+                    pytube.exception.DoesNotExist,
+                    pytube.exception.AgeRestricted) as e:
+                print(e)
+                print('Error downloading the video %s' % yt_link)
+                self.saved_entries[time_entry.url] = (
+                    time_entry._replace(status=-2))
+                continue
+            else:
+                self.saved_entries[time_entry.url] = (
+                    time_entry._replace(status=1))
