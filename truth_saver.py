@@ -8,10 +8,11 @@ import pickle
 
 import requests
 from pytube import YouTube
+# TODO(dc): Add python2.x support with older BS
 from bs4 import BeautifulSoup
 
 # Base URL for the rankings
-BASE_URL = 'http://rankings.the-elite.net/'
+BASE_URL = 'https://rankings.the-elite.net/'
 AJAX_ENDPOINT = 'ajax/stage/'
 
 # Standard download path
@@ -60,22 +61,32 @@ class TimeEntry(collections.namedtuple('TimeEntry',
 
     def vid_path(self):
         """Returns a local path for where videos should be downloaded."""
-        local_dir = DEFAULT_PATH + self.player
         vid_name = (self.player + ' ' + self.stage
-                    + ' ' +  self.mode + sec_to_ge_time(self.time))
-        return os.path.join(local_dir, vid_name)
+                    + ' ' +  self.mode + ' ' + sec_to_ge_time(self.time))
+        return os.path.join(self.player, vid_name)
 
 
 
 def ge_time_to_sec(time_str):
-    """Converts time MM:SS to just seconds."""
+    """Converts time MM:SS to int seconds."""
     t_l = time_str.split(':')
-    return 60*t_l[0] + t_l[1]
+    if len(t_l) == 2:
+        return 60*int(t_l[0]) + int(t_l[1])
+    elif len(t_l) == 3:
+        return 3600*int(t_l[0]) + 60*int(t_l[1]) + int(t_l[2])
+    else:
+        raise ValueError('Time String %s is not in expected format!'
+                         % time_str)
 
 
 def sec_to_ge_time(time_sec):
-    """Converts time from number of seconds to MM:SS."""
-    return str(int(time_sec / 60)) + ':' + str(time_sec%60)
+    """Converts time from number of seconds to H:MM:SS."""
+    if int(time_sec / 3600) == 0:
+        return '%d:%02d' % (int(time_sec / 60), time_sec%60)
+    else:
+        return '%d:%02d:%0d' % (int(time_sec / 3600),
+                                int(time_sec % 3600)/60,
+                                int(time_sec % 60))
 
 
 class TruthSaver(object):
@@ -93,17 +104,26 @@ class TruthSaver(object):
     folders where the times are downloaded.
   """
 
-    def __init__(self):
+    def __init__(self, filepath=None, video_root=DEFAULT_PATH):
         """Initalizes self.local_path and self.saved_entries."""
-        self.local_path = DEFAULT_PATH
-        try:
-            self.saved_entries = self.get_saved_list()
-        except (IOError, pickle.UnpicklingError) as e:
-            print('Error loading file. Starting with an empty list.')
-            self.saved_entries = {}
 
-    def get_saved_list(self):
+        self.local_path = filepath
+        self.videos_dir_root = video_root
+
+        if not self.local_path:
+            self.saved_entries = {}
+        else:
+            try:
+                self.saved_entries = self.get_saved_list()
+            except (IOError, pickle.UnpicklingError) as e:
+                print('Error loading file. Starting with an empty list.')
+                self.saved_entries = {}
+
+    def get_saved_list(self, filepath=None):
         """Given full path return times_list saved as a pickle file"""
+
+        if filepath:
+            self.local_path = filepath
 
         try:
             binfile = open(self.local_path, 'rb')
@@ -123,8 +143,13 @@ class TruthSaver(object):
         return times_dict
 
     #saves the list
-    def save_entries(self):
+    def save_entries(self, filepath=None):
         """Save the currnet self.saved_entries to a pickle file."""
+
+        if filepath:
+            self.local_path = filepath
+        elif not self.local_path:
+            self.local_path = './default.pkl'
         try:
             binfile = open(self.local_path,'wb')
         except IOError:
@@ -136,6 +161,7 @@ class TruthSaver(object):
 
     def stage_data_to_times(self, stage, stage_data):
         """Returns a dictonary of regular times with videos for a stage."""
+
         times = {}
 
         if stage[0] < 21:
@@ -148,11 +174,16 @@ class TruthSaver(object):
         #     Time(Player_Name, FirstN+LastN, Player_ID,
         #          Time_ID, Time_sec, vid_comment_status*)
         # Comment vid_comment_status 0 = None, 1 = Comment, 2 = Video
-        for mode, player_times in zip(MODES[game][:2], stage_data):
-            for t in player_times:
+        for mode, player_times in zip(MODES[game][:3], stage_data):
+
+            # The player_times array is not sliced by player this does that
+            sliced_times = [player_times[i:i + 6] for i in range(
+                0, len(player_times), 6)]
+
+            for t in sliced_times:
                 if t[5] == 2:
                     time_id = t[3]
-                    time_url = BASE_URL + '~' + t[1] + '/time/' + time_id
+                    time_url = BASE_URL + '~' + t[1] + '/time/' + str(time_id)
                     entry = TimeEntry(url=time_url, time_id=time_id,
                                       player=t[0], mode=mode, stage=stage[1],
                                       time=t[4], status=0)
@@ -226,6 +257,7 @@ class TruthSaver(object):
 
     def get_yt_link(self, time_entry):
         """Returns youtube link if there is one, raises execptions if not."""
+
         response = requests.get(time_entry.url)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
@@ -244,6 +276,7 @@ class TruthSaver(object):
 
     def update_download_list(self):
         """Updates the saved_entries with new times."""
+
         current_entries = self.get_all_time_entries()
 
         for cur_entry_k, cur_entry_v in current_entries.items():
@@ -253,7 +286,9 @@ class TruthSaver(object):
 
     def download_yt_video(self, yt_link, time_entry):
         """Downloads highest quality yt video given the link, and TimeEntry."""
-        vid_dirname, vid_basename = os.path.split(time_entry.vid_path())
+
+        player_dirname, vid_basename = os.path.split(time_entry.vid_path())
+        vid_dirname = os.path.join(self.videos_dir_root, player_dirname)
         yt_handle = YouTube(yt_link)
         if not os.path.isdir(vid_dirname):
             os.mkdir(vid_dirname)
@@ -265,6 +300,7 @@ class TruthSaver(object):
 
     def download_videos(self, dl_status=0):
         """Saves all videos with status equal to dl_status."""
+
         for time_entry in self.saved_entries.values():
             if time_entry.status != dl_status:
                 continue
