@@ -39,7 +39,7 @@ class TestTruth(unittest.TestCase):
 
         some_time = truth_saver.TimeEntry(
             url='https://rankings.the-elite.net/~Oscar+Pleininger/time/115050',
-            time_id='115050', player='Oscar Pleininger', mode='SA',
+            time_id=115050, player='Oscar Pleininger', mode='SA',
             stage='frigate', time=63, status=0)
         expected_path = (
             'Oscar Pleininger/Oscar Pleininger frigate SA 1:03')
@@ -50,11 +50,11 @@ class TestTruth(unittest.TestCase):
         truth = truth_saver.TruthSaver()
         entry1 = truth_saver.TimeEntry(
             url='https://rankings.the-elite.net/~Oscar+Pleininger/time/115050',
-            time_id='115050', player='Oscar Pleininger', mode='SA',
+            time_id=115050, player='Oscar Pleininger', mode='SA',
             stage='frigate', time=63, status=0)
         entry2 = truth_saver.TimeEntry(
             url='https://rankings.the-elite.net/goldeneye/ltk/300',
-            time_id='300', player='Lloyd Palmer', mode='DLTK',
+            time_id=300, player='Lloyd Palmer', mode='DLTK',
             stage='train', time=3937, status=0)
 
         saved_entries = {entry1.url:entry1, entry2.url:entry2}
@@ -70,11 +70,11 @@ class TestTruth(unittest.TestCase):
 
         entry1 = truth_saver.TimeEntry(
             url='https://rankings.the-elite.net/~Oscar+Pleininger/time/115050',
-            time_id='115050', player='Oscar Pleininger', mode='SA',
+            time_id=115050, player='Oscar Pleininger', mode='SA',
             stage='frigate', time=63, status=0)
         entry2 = truth_saver.TimeEntry(
             url='https://rankings.the-elite.net/goldeneye/ltk/300',
-            time_id='300', player='Lloyd Palmer', mode='DLTK',
+            time_id=300, player='Lloyd Palmer', mode='DLTK',
             stage='train', time=3937, status=0)
 
         saved_entries = {entry1.url:entry1, entry2.url:entry2}
@@ -86,5 +86,14 @@ class TestTruth(unittest.TestCase):
         json_data = json.loads(json_file.read())
         times = truth_saver.TruthSaver().stage_data_to_times(
             (19, 'aztec'), json_data)
-        print(times)
-        import pdb; pdb.set_trace()
+        marc_entry = truth_saver.TimeEntry(
+            url='https://rankings.the-elite.net/~Dark+Inkosi/time/110357',
+            time_id=110357, player='Marc Rützou', mode='SA',
+            stage='aztec', time=92, status=0)
+        david_entry = truth_saver.TimeEntry(
+            url='https://rankings.the-elite.net/~True+Faith/time/104342',
+            time_id=104342, player='David Clemens', mode='00A',
+            stage='aztec', time=97, status=0
+        )
+        self.assertEqual(times[marc_entry.url], marc_entry)
+        self.assertEqual(times[david_entry.url], david_entry)
