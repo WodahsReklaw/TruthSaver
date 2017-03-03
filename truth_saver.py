@@ -7,13 +7,13 @@ import os
 import pickle
 
 import requests
-from pytube import YouTube
+import pytube
 # TODO(dc): Add python2.x support with older BS
 from bs4 import BeautifulSoup
 
 # Base URL for the rankings
-BASE_URL = 'https://rankings.the-elite.net/'
-AJAX_ENDPOINT = 'ajax/stage/'
+BASE_URL = 'https://rankings.the-elite.net'
+AJAX_ENDPOINT = '/ajax/stage/'
 
 # Standard download path
 DEFAULT_PATH = './vids/'
@@ -136,7 +136,8 @@ class TruthSaver(object):
             print('UnpicklingError: pickle file %s failed to open.'
                   % self.local_path)
             raise e
-        binfile.close()
+        finally:
+            binfile.close()
         # TODO(dc): Change print statements to logging
         print('File %s properly loaded!' % self.local_path)
         print('Fetched file is of size: ' + str(len(times_dict)))
@@ -151,7 +152,7 @@ class TruthSaver(object):
         elif not self.local_path:
             self.local_path = './default.pkl'
         try:
-            binfile = open(self.local_path,'wb')
+            binfile = open(self.local_path, 'wb')
         except IOError:
             print('Error writing download list.')
             raise
@@ -175,15 +176,13 @@ class TruthSaver(object):
         #          Time_ID, Time_sec, vid_comment_status*)
         # Comment vid_comment_status 0 = None, 1 = Comment, 2 = Video
         for mode, player_times in zip(MODES[game][:3], stage_data):
-
             # The player_times array is not sliced by player this does that
             sliced_times = [player_times[i:i + 6] for i in range(
                 0, len(player_times), 6)]
-
             for t in sliced_times:
                 if t[5] == 2:
                     time_id = t[3]
-                    time_url = BASE_URL + '~' + t[1] + '/time/' + str(time_id)
+                    time_url = BASE_URL + '/~' + t[1] + '/time/' + str(time_id)
                     entry = TimeEntry(url=time_url, time_id=time_id,
                                       player=t[0], mode=mode, stage=stage[1],
                                       time=t[4], status=0)
@@ -198,7 +197,7 @@ class TruthSaver(object):
         else:
             game = GAMES[1]
 
-        url = BASE_URL + game + '/ltk/stage/' + stage[1]
+        url = BASE_URL + '/' + game + '/ltk/stage/' + stage[1]
         page = requests.get(url)
 
         try:
@@ -229,7 +228,7 @@ class TruthSaver(object):
     def get_regular_level_data(self, stage):
         """Returns dictonary of up to date regular times for a stage."""
 
-        url = BASE_URL + 'ajax/stage/' + stage[1]
+        url = BASE_URL + AJAX_ENDPOINT + stage[1]
         # TODO(dc): Log page access.
         response = requests.get(url)
         try:
@@ -255,24 +254,34 @@ class TruthSaver(object):
                 time_entries.update(self.get_ltk_level_data(stage))
         return time_entries
 
-    def get_yt_link(self, time_entry):
+    @classmethod
+    def get_yt_link(cls, time_entry):
         """Returns youtube link if there is one, raises execptions if not."""
 
         response = requests.get(time_entry.url)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
-        for tag in soup.find_all('a', href=True):
-            if 'YouTube' in tag.text:
-                return tag['href']
-            elif ('Download video' in tag.text
-                  and 'youtu' in tag['href']):
-                return tag['href']
-            elif 'Twitch' in tag.text:
-                raise ValueError('Cannot download twitch video: %s'
-                                 % tag['href'])
-            elif 'Download video' in tag.text:
-                raise ValueError('Manually download video %s'
-                                 % tag['href'])
+        for tag in soup.find_all('p'):
+            for link in tag.find_all('a', href=True):
+                if 'YouTube' in link.text:
+                    return link['href']
+                elif ('Download video' in link.text
+                      and 'youtu' in link['href']):
+                    return link['href']
+
+                if 'Twitch' in link.text:
+                    raise ValueError(
+                        'Cannot download %s it is a twitch video %s'
+                        % (os.path.basename(time_entry.vid_path()),
+                           link['href']))
+                elif 'Download video' in link.text:
+                    raise ValueError(
+                        'Manually download %s, at %s'
+                        % (os.path.basename(time_entry.vid_path()),
+                           link['href']))
+
+        raise ValueError('Expected video link for time %s, found nothing.'
+                         % os.path.basename(time_entry.vid_path()))
 
     def update_download_list(self):
         """Updates the saved_entries with new times."""
@@ -289,7 +298,7 @@ class TruthSaver(object):
 
         player_dirname, vid_basename = os.path.split(time_entry.vid_path())
         vid_dirname = os.path.join(self.videos_dir_root, player_dirname)
-        yt_handle = YouTube(yt_link)
+        yt_handle = pytube.YouTube(yt_link)
         if not os.path.isdir(vid_dirname):
             os.mkdir(vid_dirname)
         yt_handle.set_filename(vid_basename)
