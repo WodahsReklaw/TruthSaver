@@ -3,6 +3,8 @@
 """Saves all videos found on rankings.the-elite.net"""
 
 import collections
+import datetime
+import logging
 import os
 import pickle
 
@@ -10,6 +12,15 @@ import requests
 import pytube
 # TODO(dc): Add python2.x support with older BS
 from bs4 import BeautifulSoup
+
+# set up logging to file - see previous section for more details
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                    datefmt='%m-%d %H:%M',
+                    filename='/tmp/ltruth_saver_%s.log'
+                    % datetime.datetime.now().isoformat(),
+                    filemode='w')
+
 
 # Base URL for the rankings
 BASE_URL = 'https://rankings.the-elite.net'
@@ -116,7 +127,7 @@ class TruthSaver(object):
             try:
                 self.saved_entries = self.get_saved_list()
             except (IOError, pickle.UnpicklingError) as e:
-                print('Error loading file. Starting with an empty list.')
+                logging.error('Error loading file. Starting with an empty list.')
                 self.saved_entries = {}
 
     def get_saved_list(self, filepath=None):
@@ -128,19 +139,19 @@ class TruthSaver(object):
         try:
             binfile = open(self.local_path, 'rb')
         except IOError as e:
-            print('IOError: for file %s' % self.local_path)
+            logging.error('IOError: for file %s', self.local_path)
             raise e
         try:
             times_dict = pickle.load(binfile)
         except pickle.UnpicklingError as e:
-            print('UnpicklingError: pickle file %s failed to open.'
-                  % self.local_path)
+            logging.error('UnpicklingError: pickle file %s failed to open.',
+                          self.local_path)
             raise e
         finally:
             binfile.close()
         # TODO(dc): Change print statements to logging
-        print('File %s properly loaded!' % self.local_path)
-        print('Fetched file is of size: ' + str(len(times_dict)))
+        logging.info('File %s properly loaded!', self.local_path)
+        logging.info('Fetched file is of size: ' + str(len(times_dict)))
         return times_dict
 
     #saves the list
@@ -154,7 +165,8 @@ class TruthSaver(object):
         try:
             binfile = open(self.local_path, 'wb')
         except IOError:
-            print('Error writing download list.')
+            logging.error('Error writing download list, %s',
+                          self.local_path)
             raise
         pickle.dump(self.saved_entries, binfile)
         binfile.close()
@@ -203,7 +215,7 @@ class TruthSaver(object):
         try:
             page.raise_for_status()
         except:
-            print("Error loading page: " + url)
+            logging.error("Error loading page: " + url)
             raise
 
         ltk_times = {}
@@ -229,14 +241,14 @@ class TruthSaver(object):
         """Returns dictonary of up to date regular times for a stage."""
 
         url = BASE_URL + AJAX_ENDPOINT + stage[1]
-        # TODO(dc): Log page access.
+        logging.info('Loading AJAX page %s', url)
         response = requests.get(url)
         try:
             response.raise_for_status()
             stage_data = response.json()
-        except ValueError:
+        except ValueError as e:
             # TODO(dc): Add a clean exit.
-            # TODO(dc): Add logging.
+            logging.error('Could not fetch data %s', str(e))
             raise
 
         return self.stage_data_to_times(stage, stage_data)
@@ -305,7 +317,7 @@ class TruthSaver(object):
         # This will download the highest quality video
         hq_vid = sorted(yt_handle.videos, key=lambda x: x.resolution)[-1]
         hq_vid.download(vid_dirname)
-        print('Downloaded video: %s' % time_entry.vid_path())
+        logging.info('Downloaded video: %s', time_entry.vid_path())
 
     def download_videos(self, dl_status=0):
         """Saves all videos with status equal to dl_status."""
@@ -316,18 +328,17 @@ class TruthSaver(object):
             try:
                 yt_link = self.get_yt_link(time_entry)
             except ValueError as e:
-                # TODO(dc): Log exception instead of print
-                print(e)
+                logging.error(e)
                 self.saved_entries[time_entry.url] = (
                     time_entry._replace(status=-1))
                 continue
             try:
-                self.download_yt_video(yt_link)
+                self.download_yt_video(yt_link, time_entry)
             except (pytube.exception.PytubeError,
                     pytube.exception.DoesNotExist,
                     pytube.exception.AgeRestricted) as e:
-                print(e)
-                print('Error downloading the video %s' % yt_link)
+                logging.error(str(e))
+                logging.error('Error downloading the video %s', yt_link)
                 self.saved_entries[time_entry.url] = (
                     time_entry._replace(status=-2))
                 continue
