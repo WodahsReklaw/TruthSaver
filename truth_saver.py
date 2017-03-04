@@ -114,12 +114,19 @@ class TruthSaver(object):
     self.local_path is the path where player folders live and in the player
     folders where the times are downloaded.
   """
+    NEW_URL = 0
+    DOWNLOADED = 1
+    BAD_LINK = -1
+    BAD_VIDEO = -2
 
-    def __init__(self, filepath=None, video_root=DEFAULT_PATH):
+    def __init__(self, filepath=None, video_root=DEFAULT_PATH,
+                 update_only=False, try_all=False):
         """Initalizes self.local_path and self.saved_entries."""
 
         self.local_path = filepath
         self.videos_dir_root = video_root
+        self.update_only = update_only
+        self.try_all = try_all
 
         if not self.local_path:
             self.saved_entries = {}
@@ -161,7 +168,8 @@ class TruthSaver(object):
         if filepath:
             self.local_path = filepath
         elif not self.local_path:
-            self.local_path = './default.pkl'
+            self.local_path = ('./truth_saver_%s.pkl'
+                    % datetime.datetime.now().isoformat().split('.')[0])
         try:
             binfile = open(self.local_path, 'wb')
         except IOError:
@@ -197,7 +205,7 @@ class TruthSaver(object):
                     time_url = BASE_URL + '/~' + t[1] + '/time/' + str(time_id)
                     entry = TimeEntry(url=time_url, time_id=time_id,
                                       player=t[0], mode=mode, stage=stage[1],
-                                      time=t[4], status=0)
+                                      time=t[4], status=self.NEW_URL)
                     times[entry.url] = entry
         return times
 
@@ -233,7 +241,7 @@ class TruthSaver(object):
                     time = ge_time_to_sec(time_tag.text)
                     entry = TimeEntry(url=time_url, time_id=time_id,
                                       player=player, mode=mode, stage=stage[1],
-                                      time=time, status=0)
+                                      time=time, status=self.NEW_URL)
                     ltk_times[entry.url] = entry
         return ltk_times
 
@@ -319,18 +327,20 @@ class TruthSaver(object):
         hq_vid.download(vid_dirname)
         logging.info('Downloaded video: %s', time_entry.vid_path())
 
-    def download_videos(self, dl_status=0):
-        """Saves all videos with status equal to dl_status."""
+    def download_videos(self):
+        """Saves all new videos and retries error videos if try_all is true."""
 
         for time_entry in self.saved_entries.values():
-            if time_entry.status != dl_status:
+            if time_entry.status == self.DOWNLOADED:
+                continue
+            if time_entry.status != self.NEW_URL and not self.try_all:
                 continue
             try:
                 yt_link = self.get_yt_link(time_entry)
             except ValueError as e:
                 logging.error(e)
                 self.saved_entries[time_entry.url] = (
-                    time_entry._replace(status=-1))
+                    time_entry._replace(status=self.BAD_LINK))
                 continue
             try:
                 self.download_yt_video(yt_link, time_entry)
@@ -340,8 +350,8 @@ class TruthSaver(object):
                 logging.error(str(e))
                 logging.error('Error downloading the video %s', yt_link)
                 self.saved_entries[time_entry.url] = (
-                    time_entry._replace(status=-2))
+                    time_entry._replace(status=self.BAD_VIDEO))
                 continue
             else:
                 self.saved_entries[time_entry.url] = (
-                    time_entry._replace(status=1))
+                    time_entry._replace(status=self.DOWNLOADED))
