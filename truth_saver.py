@@ -17,8 +17,8 @@ from bs4 import BeautifulSoup
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                     datefmt='%m-%d %H:%M',
-                    filename='/tmp/ltruth_saver_%s.log'
-                    % datetime.datetime.now().isoformat(),
+                    filename='/tmp/truth_saver_%s.log'
+                    % datetime.datetime.now().isoformat().replace(':','-'),
                     filemode='w')
 
 
@@ -114,12 +114,25 @@ class TruthSaver(object):
     self.local_path is the path where player folders live and in the player
     folders where the times are downloaded.
   """
+    NEW_URL = 0
+    DOWNLOADED = 1
+    BAD_LINK = -1
+    BAD_VIDEO = -2
 
-    def __init__(self, filepath=None, video_root=DEFAULT_PATH):
+    def __init__(self, filepath=None, video_root=None,
+                 update_only=False, try_all=False, low_quality=False):
         """Initalizes self.local_path and self.saved_entries."""
 
         self.local_path = filepath
         self.videos_dir_root = video_root
+        self.update_only = update_only
+        self.try_all = try_all
+        self.low_quality = low_quality
+
+        if not self.videos_dir_root:
+            self.videos_dir_root = DEFAULT_PATH
+        if not os.path.isdir(self.videos_dir_root):
+            os.mkdir(self.videos_dir_root)
 
         if not self.local_path:
             self.saved_entries = {}
@@ -161,7 +174,8 @@ class TruthSaver(object):
         if filepath:
             self.local_path = filepath
         elif not self.local_path:
-            self.local_path = './default.pkl'
+            self.local_path = ('./truth_saver_%s.pkl'
+                    % datetime.datetime.now().isoformat().split('.')[0])
         try:
             binfile = open(self.local_path, 'wb')
         except IOError:
@@ -197,7 +211,7 @@ class TruthSaver(object):
                     time_url = BASE_URL + '/~' + t[1] + '/time/' + str(time_id)
                     entry = TimeEntry(url=time_url, time_id=time_id,
                                       player=t[0], mode=mode, stage=stage[1],
-                                      time=t[4], status=0)
+                                      time=t[4], status=self.NEW_URL)
                     times[entry.url] = entry
         return times
 
@@ -233,14 +247,14 @@ class TruthSaver(object):
                     time = ge_time_to_sec(time_tag.text)
                     entry = TimeEntry(url=time_url, time_id=time_id,
                                       player=player, mode=mode, stage=stage[1],
-                                      time=time, status=0)
+                                      time=time, status=self.NEW_URL)
                     ltk_times[entry.url] = entry
         return ltk_times
 
     def get_regular_level_data(self, stage):
         """Returns dictonary of up to date regular times for a stage."""
 
-        url = BASE_URL + AJAX_ENDPOINT + stage[1]
+        url = BASE_URL + AJAX_ENDPOINT + str(stage[0])
         logging.info('Loading AJAX page %s', url)
         response = requests.get(url)
         try:
@@ -257,9 +271,11 @@ class TruthSaver(object):
         """Returns dictonry of all up to date GE/PD times with videos."""
 
         time_entries = {}
-
+        print('Loading Stage Data...')
         for game in GAMES:
             for stage in STAGES[game]:
+                print('%02d/40 ... %s             \r'
+                      % (stage[0], stage[1]))
                 # Regular mode data first
                 time_entries.update(self.get_regular_level_data(stage))
                 # LTK Times
@@ -311,37 +327,41 @@ class TruthSaver(object):
         player_dirname, vid_basename = os.path.split(time_entry.vid_path())
         vid_dirname = os.path.join(self.videos_dir_root, player_dirname)
         yt_handle = pytube.YouTube(yt_link)
+
         if not os.path.isdir(vid_dirname):
             os.mkdir(vid_dirname)
         yt_handle.set_filename(vid_basename)
         # This will download the highest quality video
-        hq_vid = sorted(yt_handle.videos, key=lambda x: x.resolution)[-1]
+        hq_vid = sorted(yt_handle.videos, key=lambda x: x.resolution,
+                        reverse=(not self.low_quality))[0]
         hq_vid.download(vid_dirname)
         logging.info('Downloaded video: %s', time_entry.vid_path())
 
-    def download_videos(self, dl_status=0):
-        """Saves all videos with status equal to dl_status."""
+    def download_videos(self):
+        """Saves all new videos and retries error videos if try_all is true."""
 
         for time_entry in self.saved_entries.values():
-            if time_entry.status != dl_status:
+            if time_entry.status == self.DOWNLOADED:
+                continue
+            if time_entry.status != self.NEW_URL and not self.try_all:
                 continue
             try:
                 yt_link = self.get_yt_link(time_entry)
             except ValueError as e:
                 logging.error(e)
                 self.saved_entries[time_entry.url] = (
-                    time_entry._replace(status=-1))
+                    time_entry._replace(status=self.BAD_LINK))
                 continue
             try:
                 self.download_yt_video(yt_link, time_entry)
-            except (pytube.exception.PytubeError,
-                    pytube.exception.DoesNotExist,
-                    pytube.exception.AgeRestricted) as e:
+            except (pytube.exceptions.PytubeError,
+                    pytube.exceptions.DoesNotExist,
+                    pytube.exceptions.AgeRestricted) as e:
                 logging.error(str(e))
                 logging.error('Error downloading the video %s', yt_link)
                 self.saved_entries[time_entry.url] = (
-                    time_entry._replace(status=-2))
+                    time_entry._replace(status=self.BAD_VIDEO))
                 continue
             else:
                 self.saved_entries[time_entry.url] = (
-                    time_entry._replace(status=1))
+                    time_entry._replace(status=self.DOWNLOADED))
