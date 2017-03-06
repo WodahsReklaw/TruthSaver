@@ -5,7 +5,7 @@
 import argparse
 import atexit
 
-from . import TruthSaver
+import truth_saver
 
 def main():
 
@@ -14,7 +14,10 @@ def main():
                         help='Only update the times list, skip'
                         ' downloading.',
                         action='store_true')
-    parser.add_arguemnt('--try_all',
+    parser.add_argument('--download_only',
+                        help='Only download saved times, no update.',
+                        action='store_true')
+    parser.add_argument('--try_all',
                         help='Try to download all videos which are,'
                         ' not in a good status.',
                         action='store_true')
@@ -26,15 +29,19 @@ def main():
                         help='Directory for were to save downloaded'
                         ' videos.',
                         type=str)
+    parser.add_argument('--low_quality',
+                        help='Download lowest quality videos.',
+                        action='store_true')
 
-    args = parser.args()
+    args = parser.parse_args()
 
-    truth = TruthSaver(args.time_path, args.video_dir,
-                       args.update_only, args.try_all)
+    truth = truth_saver.TruthSaver(args.times_path, args.video_dir,
+                                   args.update_only, args.try_all, args.low_quality)
 
-    truth.update_download_list()
+    if not args.download_only:
+        truth.update_download_list()
     if not args.update_only:
-        atexit.register.save_entries()
+        atexit.register(truth.save_entries)
         truth.download_videos()
 
 if __name__ == '__main__':
