@@ -13,12 +13,16 @@ import pytube
 # TODO(dc): Add python2.x support with older BS
 from bs4 import BeautifulSoup
 
+
+def datetime_ts():
+    dt = datetime.datetime.now()
+    return dt.isoformat().split('.')[0].replace(':', '-')
+
 # set up logging to file - see previous section for more details
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                     datefmt='%m-%d %H:%M',
-                    filename='/tmp/truth_saver_%s.log'
-                    % datetime.datetime.now().isoformat().replace(':','-'),
+                    filename='/tmp/truth_saver_%s.log' % datetime_ts(),
                     filemode='w')
 
 
@@ -174,8 +178,7 @@ class TruthSaver(object):
         if filepath:
             self.local_path = filepath
         elif not self.local_path:
-            self.local_path = ('./truth_saver_%s.pkl'
-                    % datetime.datetime.now().isoformat().split('.')[0])
+            self.local_path = ('./truth_saver_%s.pkl' % datetime_ts())
         try:
             binfile = open(self.local_path, 'wb')
         except IOError:
