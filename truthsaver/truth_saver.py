@@ -13,12 +13,16 @@ import pytube
 # TODO(dc): Add python2.x support with older BS
 from bs4 import BeautifulSoup
 
+
+def datetime_ts():
+    dt = datetime.datetime.now()
+    return dt.isoformat().split('.')[0].replace(':', '-')
+
 # set up logging to file - see previous section for more details
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                     datefmt='%m-%d %H:%M',
-                    filename='/tmp/truth_saver_%s.log'
-                    % datetime.datetime.now().isoformat().replace(':','-'),
+                    filename='/tmp/truth_saver_%s.log' % datetime_ts(),
                     filemode='w')
 
 
@@ -174,8 +178,7 @@ class TruthSaver(object):
         if filepath:
             self.local_path = filepath
         elif not self.local_path:
-            self.local_path = ('./truth_saver_%s.pkl'
-                    % datetime.datetime.now().isoformat().split('.')[0])
+            self.local_path = ('./truth_saver_%s.pkl' % datetime_ts())
         try:
             binfile = open(self.local_path, 'wb')
         except IOError:
@@ -261,10 +264,8 @@ class TruthSaver(object):
             response.raise_for_status()
             stage_data = response.json()
         except ValueError as e:
-            # TODO(dc): Add a clean exit.
             logging.error('Could not fetch data %s', str(e))
             raise
-
         return self.stage_data_to_times(stage, stage_data)
 
     def get_all_time_entries(self):
@@ -274,12 +275,13 @@ class TruthSaver(object):
         print('Loading Stage Data...')
         for game in GAMES:
             for stage in STAGES[game]:
-                print('%02d/40 ... %s             \r'
-                      % (stage[0], stage[1]))
+                print('%02d/40 ... %s             '
+                      % (stage[0], stage[1]), end='\r')
                 # Regular mode data first
                 time_entries.update(self.get_regular_level_data(stage))
                 # LTK Times
                 time_entries.update(self.get_ltk_level_data(stage))
+        print('')
         return time_entries
 
     @classmethod
@@ -340,7 +342,14 @@ class TruthSaver(object):
     def download_videos(self):
         """Saves all new videos and retries error videos if try_all is true."""
 
+        n_entries = len(self.saved_entries)
+        n = 0
+        print('Checking / Downloading: %s Videos ' % n_entries)
         for time_entry in self.saved_entries.values():
+            n += 1
+            bar_len = int(25*n/n_entries)
+            bar = '+'*bar_len + ' '*(25 - bar_len)
+            print('[ %s / %s ] |%s| ' % (n, n_entries, bar), end='\r')
             if time_entry.status == self.DOWNLOADED:
                 continue
             if time_entry.status != self.NEW_URL and not self.try_all:
@@ -365,3 +374,5 @@ class TruthSaver(object):
             else:
                 self.saved_entries[time_entry.url] = (
                     time_entry._replace(status=self.DOWNLOADED))
+        print('[ %s / %s ] |%s| ' % (n, n_entries, '+'*25))
+        print('Finished downloading all videos.')
