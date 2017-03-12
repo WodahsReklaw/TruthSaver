@@ -7,6 +7,7 @@ import datetime
 import logging
 import os
 import pickle
+import time
 
 import requests
 import pytube
@@ -29,6 +30,9 @@ logging.basicConfig(level=logging.INFO,
 # Base URL for the rankings
 BASE_URL = 'https://rankings.the-elite.net'
 AJAX_ENDPOINT = '/ajax/stage/'
+
+# Number of max atttempts to resolve url
+MAX_TRIES = 5
 
 # Standard download path
 DEFAULT_PATH = './vids/'
@@ -81,7 +85,6 @@ class TimeEntry(collections.namedtuple('TimeEntry',
         return os.path.join(self.player, vid_name)
 
 
-
 def ge_time_to_sec(time_str):
     """Converts time MM:SS to int seconds."""
     t_l = time_str.split(':')
@@ -103,6 +106,20 @@ def sec_to_ge_time(time_sec):
                                 int(time_sec % 3600)/60,
                                 int(time_sec % 60))
 
+def request_with_retry(url):
+    """Requests with retry, upon failure it has exponetial backoff."""
+    tries = 0
+    while tries < MAX_TRIES:
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+        except ValueError:
+            time.sleep(2*2**tries)
+            tries += 1
+            continue
+        else:
+            break
+    return response
 
 class TruthSaver(object):
     """Manages the saved entries of times to download, and downloading them.
@@ -227,7 +244,7 @@ class TruthSaver(object):
             game = GAMES[1]
 
         url = BASE_URL + '/' + game + '/ltk/stage/' + stage[1]
-        page = requests.get(url)
+        page = request_with_retry(url)
 
         try:
             page.raise_for_status()
@@ -259,7 +276,7 @@ class TruthSaver(object):
 
         url = BASE_URL + AJAX_ENDPOINT + str(stage[0])
         logging.info('Loading AJAX page %s', url)
-        response = requests.get(url)
+        response = request_with_retry(url)
         try:
             response.raise_for_status()
             stage_data = response.json()
@@ -288,7 +305,7 @@ class TruthSaver(object):
     def get_yt_link(cls, time_entry):
         """Returns youtube link if there is one, raises execptions if not."""
 
-        response = requests.get(time_entry.url)
+        response = request_with_retry(time_entry.url)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
         for tag in soup.find_all('p'):
