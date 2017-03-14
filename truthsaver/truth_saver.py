@@ -121,6 +121,20 @@ def request_with_retry(url):
             break
     return response
 
+def pytubeRetry(url):
+    tries = 0
+    while tries < MAX_TRIES:
+        try:
+            yt_handle = pytube.YouTube(url)
+        except IOError:
+            time.sleep(2*2**tries)
+            tries += 1
+            continue
+        else:
+            break
+    return yt_handle
+
+
 class TruthSaver(object):
     """Manages the saved entries of times to download, and downloading them.
 
@@ -345,7 +359,7 @@ class TruthSaver(object):
 
         player_dirname, vid_basename = os.path.split(time_entry.vid_path())
         vid_dirname = os.path.join(self.videos_dir_root, player_dirname)
-        yt_handle = pytube.YouTube(yt_link)
+        yt_handle = pytubeRetry(yt_link)
 
         if not os.path.isdir(vid_dirname):
             os.mkdir(vid_dirname)
@@ -353,7 +367,12 @@ class TruthSaver(object):
         # This will download the highest quality video
         hq_vid = sorted(yt_handle.videos, key=lambda x: x.resolution,
                         reverse=(not self.low_quality))[0]
-        hq_vid.download(vid_dirname)
+        try:
+            hq_vid.download(vid_dirname)
+        except IOError as e:
+            logging.error('IOError downloading %s' % vid_dirname)
+            logging.error(str(e))
+            raise IOError
         logging.info('Downloaded video: %s', time_entry.vid_path())
 
     def download_videos(self):
