@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+# -*-  coding: utf-8 -*-
 """Saves all videos found on rankings.the-elite.net"""
 
 import collections
@@ -131,8 +131,8 @@ def pytubeRetry(url):
             tries += 1
             continue
         else:
-            break
-    return yt_handle
+            return yt_handle
+    raise IOError('Unable to load %s into pytube.YouTube' % url)
 
 
 class TruthSaver(object):
