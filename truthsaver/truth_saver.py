@@ -11,7 +11,7 @@ import time
 
 import requests
 import pytube
-# TODO(dc): Add python2.x support with older BS
+# TODO(dc): Add python2.x support.
 from bs4 import BeautifulSoup
 
 
@@ -223,7 +223,6 @@ class TruthSaver(object):
       raise e
     finally:
       binfile.close()
-    # TODO(dc): Change print statements to logging
     logging.info('File %s properly loaded!', self.local_path)
     logging.info('Fetched file is of size: %d', len(times_dict))
     return times_dict
