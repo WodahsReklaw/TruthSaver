@@ -10,4 +10,4 @@ install:
 script:
   - py.test
 virtualenv:
-  system_site_packages: true
+  - system_site_packages: true
