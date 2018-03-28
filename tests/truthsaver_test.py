@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""To run the unit test please run py.test from the project root directory."""
 
 import json
 import os
@@ -7,15 +8,18 @@ import pickle
 import shutil
 import tempfile
 import unittest
+
 from mock import patch
 
-import truth_saver
+from truthsaver import truthsaver
+
+TEST_DIR = './tests/testdata/'
 
 def mock_request_get(*args, **kwargs):
   class MockResponse(object):
     def __init__(self, html_file, status):
       if html_file:
-        with open('./testdata/' + html_file) as f:
+        with open(os.path.join(TEST_DIR, html_file)) as f:
           self.text = f.read()
           self.content = self.text
       else:
@@ -59,22 +63,22 @@ class TestTruth(unittest.TestCase):
   def testTimeToSec(self):
     time_str = '1:30'
     expected_time = 90
-    self.assertEqual(truth_saver.ge_time_to_sec(time_str),
+    self.assertEqual(truthsaver.ge_time_to_sec(time_str),
                      expected_time)
-    self.assertEqual(truth_saver.sec_to_ge_time(expected_time),
+    self.assertEqual(truthsaver.sec_to_ge_time(expected_time),
                      time_str)
 
     long_time = '2:59:13'
     long_sec = 10753
 
-    self.assertEqual(truth_saver.ge_time_to_sec(long_time),
+    self.assertEqual(truthsaver.ge_time_to_sec(long_time),
                      long_sec)
-    self.assertEqual(truth_saver.sec_to_ge_time(long_sec),
+    self.assertEqual(truthsaver.sec_to_ge_time(long_sec),
                      long_time)
 
   def testTimeEntry(self):
 
-    some_time = truth_saver.TimeEntry(
+    some_time = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~Oscar+Pleininger/time/115050',
         time_id=115050, player='Oscar Pleininger', mode='SA',
         stage='frigate', time=63, status=0)
@@ -84,51 +88,49 @@ class TestTruth(unittest.TestCase):
     self.assertEqual(expected_path, some_time.vid_path())
 
   def testSaveEntries(self):
-    truth = truth_saver.TruthSaver()
-    entry1 = truth_saver.TimeEntry(
+    entry1 = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~Oscar+Pleininger/time/115050',
         time_id=115050, player='Oscar Pleininger', mode='SA',
         stage='frigate', time=63, status=0)
-    entry2 = truth_saver.TimeEntry(
+    entry2 = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/goldeneye/ltk/300',
         time_id=300, player='Lloyd Palmer', mode='DLTK',
         stage='train', time=3937, status=0)
 
     saved_entries = {entry1.url:entry1, entry2.url:entry2}
-    truth.saved_entries = saved_entries
     pickle_path = os.path.join(self.temp_dir, 'tmp.pkl')
-    truth.save_entries(pickle_path)
+    truthsaver.TruthSaver.save_entries(pickle_path, saved_entries)
     self.assertTrue(os.path.exists(pickle_path))
     with open(pickle_path, 'rb') as binfile:
       self.assertEqual(saved_entries, pickle.load(binfile))
 
   def testLoadEntries(self):
-    truth = truth_saver.TruthSaver('./testdata/test.pkl')
+    truth = truthsaver.TruthSaver(os.path.join(TEST_DIR, 'test.json'))
 
-    entry1 = truth_saver.TimeEntry(
+    entry1 = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~Oscar+Pleininger/time/115050',
         time_id=115050, player='Oscar Pleininger', mode='SA',
         stage='frigate', time=63, status=0)
-    entry2 = truth_saver.TimeEntry(
+    entry2 = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/goldeneye/ltk/300',
         time_id=300, player='Lloyd Palmer', mode='DLTK',
         stage='train', time=3937, status=0)
 
-    saved_entries = {entry1.url:entry1, entry2.url:entry2}
+    saved_entries = {entry1.url: entry1, entry2.url: entry2}
 
     self.assertEqual(truth.saved_entries, saved_entries)
 
   def testStageToTime(self):
-    with open('./testdata/test_data.json') as json_file:
-      ge_data = json.loads(json_file.read())
-    times = truth_saver.TruthSaver().stage_data_to_times(
+    with open(os.path.join(TEST_DIR, 'test_data.json')) as json_file:
+      ge_data = json.load(json_file)
+    times = truthsaver.TruthSaver().stage_data_to_times(
         (19, 'aztec'), ge_data)
 
-    marc_entry = truth_saver.TimeEntry(
+    marc_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~Dark+Inkosi/time/110357',
         time_id=110357, player='Marc Rützou', mode='SA',
         stage='aztec', time=92, status=0)
-    david_entry = truth_saver.TimeEntry(
+    david_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~True+Faith/time/104342',
         time_id=104342, player='David Clemens', mode='00A',
         stage='aztec', time=97, status=0)
@@ -136,19 +138,19 @@ class TestTruth(unittest.TestCase):
     self.assertEqual(times[marc_entry.url], marc_entry)
     self.assertEqual(times[david_entry.url], david_entry)
 
-    with open('./testdata/test_pd.json') as pd_json_file:
-      pd_data = json.loads(pd_json_file.read())
-    pd_times = truth_saver.TruthSaver().stage_data_to_times(
+    with open(os.path.join(TEST_DIR, 'test_pd.json')) as pd_json_file:
+      pd_data = json.load(pd_json_file)
+    pd_times = truthsaver.TruthSaver().stage_data_to_times(
         (21, 'defection'), pd_data)
-    jezz_entry = truth_saver.TimeEntry(
+    jezz_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~jezz/time/111493',
         time_id=111493, player='jezz', mode='PA',
         stage='defection', time=82, status=0)
-    illu_entry = truth_saver.TimeEntry(
+    illu_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~Illu/time/20761',
         time_id=20761, player='Illu', mode='Agent',
         stage='defection', time=5, status=0)
-    karl_entry = truth_saver.TimeEntry(
+    karl_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~Sim+Threat/time/98614',
         time_id=98614, player='Sim Threat', mode='SA',
         stage='defection', time=19, status=0)
@@ -157,9 +159,9 @@ class TestTruth(unittest.TestCase):
     self.assertEqual(pd_times[illu_entry.url], illu_entry)
     self.assertEqual(pd_times[karl_entry.url], karl_entry)
 
-  @patch('truth_saver.requests.get', side_effect=mock_request_get)
+  @patch('requests.get', side_effect=mock_request_get)
   def testLtkToEntries(self, mock_get):
-    truth = truth_saver.TruthSaver()
+    truth = truthsaver.TruthSaver()
     attack_ship_entries = truth.get_ltk_level_data((36, 'attack-ship'))
     self.assertEqual(len(attack_ship_entries), 14)
     dltk_count = sum(v.mode == 'DLTK' for v in attack_ship_entries.values())
@@ -167,11 +169,11 @@ class TestTruth(unittest.TestCase):
     self.assertEqual(dltk_count, 4)
     self.assertEqual(ltk_count, 10)
 
-    bb_as_entry = truth_saver.TimeEntry(
+    bb_as_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/perfect-dark/ltk/3766',
         time_id=3766, player='Big Bossman', mode='LTK',
         stage='attack-ship', time=233, status=0)
-    ff_as_entry = truth_saver.TimeEntry(
+    ff_as_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/perfect-dark/ltk/3649',
         time_id=3649, player='Flickerform', mode='DLTK',
         stage='attack-ship', time=990, status=0)
@@ -186,11 +188,11 @@ class TestTruth(unittest.TestCase):
     self.assertEqual(dltk_count, 2)
     self.assertEqual(ltk_count, 21)
 
-    ab_entry = truth_saver.TimeEntry(
+    ab_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/goldeneye/ltk/74',
         time_id=74, player='Adam Bozon', mode='LTK',
         stage='silo', time=133, status=0)
-    bb_entry = truth_saver.TimeEntry(
+    bb_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/goldeneye/ltk/3664',
         time_id=3664, player='Bryan Bosshardt', mode='DLTK',
         stage='silo', time=496, status=0)
@@ -198,55 +200,55 @@ class TestTruth(unittest.TestCase):
     self.assertEqual(silo_entries[ab_entry.url], ab_entry)
     self.assertEqual(silo_entries[bb_entry.url], bb_entry)
 
-  @patch('truth_saver.requests.get', side_effect=mock_request_get)
+  @patch('requests.get', side_effect=mock_request_get)
   def testYtLink(self, mock_request):
 
-    bb_entry = truth_saver.TimeEntry(
+    bb_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~Big+Bossman/time/10',
         time_id=10, player='Bryan Bosshardt', mode='Agent',
         stage='Dam', time=53, status=0)
-    bb_yt_link = truth_saver.TruthSaver.get_yt_link(bb_entry)
+    bb_yt_link = truthsaver.TruthSaver.get_yt_link(bb_entry)
     self.assertEqual(bb_yt_link,
                      'https://www.youtube.com/watch?v=WA4jUsCRrfs')
 
-    tara_entry = truth_saver.TimeEntry(
+    tara_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~Tara/time/113844',
         time_id=11384, player='Tara Kate', mode='Agent',
         stage='dam', time=53, status=0)
 
     try:
-      truth_saver.TruthSaver.get_yt_link(tara_entry)
+      truthsaver.TruthSaver.get_yt_link(tara_entry)
     except ValueError as e:
       self.assertIn('https://www.twitch.tv/videos/v/', str(e))
     else:
       self.fail('Exepected exception from tara_entry.')
 
-    swompz_entry = truth_saver.TimeEntry(
+    swompz_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~Swompz/time/78905',
         time_id=78905, player='Brian Dupont', mode='Agent',
         stage='archives', time=16, status=0)
 
-    sw_yt_link = truth_saver.TruthSaver.get_yt_link(swompz_entry)
+    sw_yt_link = truthsaver.TruthSaver.get_yt_link(swompz_entry)
     self.assertEqual(sw_yt_link, 'https://youtu.be/QtvECUNjszU')
 
 
-    wouter_entry = truth_saver.TimeEntry(
+    wouter_entry = truthsaver.TimeEntry(
         url='https://rankings.the-elite.net/~Wouter+Jansen/time/54778',
         time_id=54778, player='Wouter Jansen', mode='00A',
         stage='aztec', time=120, status=0)
 
     try:
-      truth_saver.TruthSaver.get_yt_link(wouter_entry)
+      truthsaver.TruthSaver.get_yt_link(wouter_entry)
     except ValueError as e:
       self.assertIn('www.oldvideo.net/time/10', str(e))
     else:
       self.fail('Expected exception from wouter_entry.')
 
-    bad_entry = truth_saver.TimeEntry(
+    bad_entry = truthsaver.TimeEntry(
         url='https://bad.com', time_id=10, player='irrel',
         mode='SPAG', stage='Nesquik', time=10, status=0)
     try:
-      truth_saver.TruthSaver.get_yt_link(bad_entry)
+      truthsaver.TruthSaver.get_yt_link(bad_entry)
     except ValueError as e:
       self.assertIn('Bad status', str(e))
     else:

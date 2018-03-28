@@ -4,6 +4,7 @@
 
 import collections
 import datetime
+import json
 import logging
 import os
 import pickle
@@ -172,19 +173,24 @@ class TruthSaver(object):
   self.saved_entries is a dictonary of TimeEntrys with the keys equal to
   TimeEntry.url which is gaurnteed to be unqiue.
 
-  self.local_path is the path where player folders live and in the player
-  folders where the times are downloaded.
+  self.record_path is the file containing the saved time entries..
   """
   NEW_URL = 0
   DOWNLOADED = 1
   BAD_LINK = -1
   BAD_VIDEO = -2
 
-  def __init__(self, filepath=None, video_root=None,
+  def __init__(self, record_path=None, video_root=None,
                update_only=False, try_all=False, low_quality=False):
-    """Initalizes self.local_path and self.saved_entries."""
+    """Init.."""
 
-    self.local_path = filepath
+    if record_path:
+      self.record_path = record_path
+      self.saved_entries = self.get_saved_list(record_path)
+    else:
+      self.record_path = ('./truth_saver_%s.json' % datetime_ts())
+      self.saved_entries = {}
+
     self.videos_dir_root = video_root
     self.update_only = update_only
     self.try_all = try_all
@@ -195,55 +201,39 @@ class TruthSaver(object):
     if not os.path.isdir(self.videos_dir_root):
       os.mkdir(self.videos_dir_root)
 
-    if not self.local_path:
-      self.saved_entries = {}
-    else:
-      try:
-        self.saved_entries = self.get_saved_list()
-      except (IOError, pickle.UnpicklingError):
-        logging.error('Error loading file. Starting with an empty list.')
-        self.saved_entries = {}
-
-  def get_saved_list(self, filepath=None):
+  @classmethod
+  def get_saved_list(self, record_path):
     """Given full path return times_list saved as a pickle file"""
 
-    if filepath:
-      self.local_path = filepath
+    _, ext = os.path.splitext(record_path)
+    if ext == '.pkl':
+      with open(record_path, 'rb') as fh:
+        logging.info('Loading from pickle file %s', record_path)
+        return pickle.load(fh)
+    elif ext == '.json':
+      with open(record_path, 'r') as fh:
+        logging.info('Loading from JSON file %s', record_path)
+        return {key: TimeEntry(*tple) for key, tple in json.load(fh).items()}
+    else:
+      raise ValueError(
+          'Valid file extensions must be .pkl or .json given %s' % ext)
 
-    try:
-      binfile = open(self.local_path, 'rb')
-    except IOError as e:
-      logging.error('IOError: for file %s', self.local_path)
-      raise e
-    try:
-      times_dict = pickle.load(binfile)
-    except pickle.UnpicklingError as e:
-      logging.error('UnpicklingError: pickle file %s failed to open.',
-                    self.local_path)
-      raise e
-    finally:
-      binfile.close()
-    logging.info('File %s properly loaded!', self.local_path)
-    logging.info('Fetched file is of size: %d', len(times_dict))
-    return times_dict
-
-  #saves the list
-  def save_entries(self, filepath=None):
+  @classmethod
+  def save_entries(cls, record_path, entries):
     """Save the currnet self.saved_entries to a pickle file."""
 
-    if filepath:
-      self.local_path = filepath
-    elif not self.local_path:
-      self.local_path = ('./truth_saver_%s.pkl' % datetime_ts())
-    try:
-      binfile = open(self.local_path, 'wb')
-    except IOError:
-      logging.error('Error writing download list, %s',
-                    self.local_path)
-      raise
-    pickle.dump(self.saved_entries, binfile)
-    binfile.close()
-    return
+    _, ext = os.path.splitext(record_path)
+    if ext == '.pkl':
+      with open(record_path, 'wb') as fh:
+        logging.info('Saving to pickle file %s', record_path)
+        pickle.dump(entries, fh)
+    elif ext == '.json':
+      with open(record_path, 'w') as fh:
+        logging.info('Saving to JSON file %s', record_path)
+        fh.write(json.dumps(entries))
+    else:
+      raise ValueError(
+          'Valid file extensions must be .pkl or .json given %s' % ext)
 
   def stage_data_to_times(self, stage, stage_data):
     """Returns a dictonary of regular times with videos for a stage."""
@@ -287,7 +277,7 @@ class TruthSaver(object):
 
     try:
       page.raise_for_status()
-    except:
+    except requests.exceptions.HTTPError:
       logging.error("Error loading page: %s", url)
       raise
 
@@ -377,7 +367,7 @@ class TruthSaver(object):
     for cur_entry_k, cur_entry_v in current_entries.items():
       if cur_entry_k not in self.saved_entries:
         self.saved_entries[cur_entry_k] = cur_entry_v
-    self.save_entries()
+    self.save_entries(self.record_path, self.saved_entries)
 
   def download_yt_video(self, yt_link, time_entry):
     """Downloads highest quality yt video given the link, and TimeEntry."""
