@@ -253,3 +253,11 @@ class TestTruth(unittest.TestCase):
       self.assertIn('Bad status', str(e))
     else:
       self.fail('Link should fail.')
+
+    def testSaveDownloadedPaths(self):
+      test_out = os.path.join(self.tmp_dir, 'foo')
+      truth = truthsaver.TruthSaver(new_times_path=test_out)
+      test_vid_paths = ['SomeSavedPath.mp4', 'SomeOtherSavedPath.mp4']
+      truth.new_times_list.extend(test_vid_paths)
+      truth.save_downloaded_paths()
+      self.assertEqual(open(test_out).read(), '\n'.join(test_vid_paths))

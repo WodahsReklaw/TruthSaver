@@ -180,7 +180,7 @@ class TruthSaver(object):
   BAD_LINK = -1
   BAD_VIDEO = -2
 
-  def __init__(self, record_path=None, video_root=None,
+  def __init__(self, record_path=None, video_root=None, new_times_path=None,
                update_only=False, try_all=False, low_quality=False):
     """Init.."""
 
@@ -190,6 +190,9 @@ class TruthSaver(object):
     else:
       self.record_path = ('./truth_saver_%s.json' % datetime_ts())
       self.saved_entries = {}
+
+    self.new_times_path = new_times_path
+    self.new_times_list = []
 
     self.videos_dir_root = video_root
     self.update_only = update_only
@@ -202,7 +205,7 @@ class TruthSaver(object):
       os.mkdir(self.videos_dir_root)
 
   @classmethod
-  def get_saved_list(self, record_path):
+  def get_saved_list(cls, record_path):
     """Given full path return times_list saved as a pickle file"""
 
     _, ext = os.path.splitext(record_path)
@@ -234,6 +237,12 @@ class TruthSaver(object):
     else:
       raise ValueError(
           'Valid file extensions must be .pkl or .json given %s' % ext)
+
+  def save_downloaded_paths(self):
+    """Saves all newly downloaded files if given a new_times_path."""
+    if self.new_times_path:
+      with open(self.new_times_path, 'w') as out_fd:
+        out_fd.write('\n'.join(self.new_times_list))
 
   def stage_data_to_times(self, stage, stage_data):
     """Returns a dictonary of regular times with videos for a stage."""
@@ -368,6 +377,7 @@ class TruthSaver(object):
       if cur_entry_k not in self.saved_entries:
         self.saved_entries[cur_entry_k] = cur_entry_v
     self.save_entries(self.record_path, self.saved_entries)
+    self.save_downloaded_paths()
 
   def download_yt_video(self, yt_link, time_entry):
     """Downloads highest quality yt video given the link, and TimeEntry."""
@@ -390,6 +400,8 @@ class TruthSaver(object):
       logging.error(str(e))
       logging.error('Skipping entry for now retry later')
       raise IOError
+    if self.newtimes_path:
+      self.newtimes_list.append(time_entry.vid_path())
     logging.info('Downloaded video: %s', time_entry.vid_path())
 
   def download_videos(self):
