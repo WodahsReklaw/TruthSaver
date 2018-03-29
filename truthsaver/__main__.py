@@ -5,10 +5,9 @@
 import argparse
 import atexit
 
-from truthsaver import truthsaver
+import truthsaver
 
 def main():
-
   parser = argparse.ArgumentParser()
   parser.add_argument('--update_only',
                       help='Only update the times list, skip'
