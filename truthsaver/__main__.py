@@ -21,21 +21,21 @@ def main():
                       ' not in a good status.',
                       action='store_true')
   parser.add_argument('--times_path',
-                      help='Path to pkl file containing a record'
+                      help='Path to ".json" or ".pkl" file containing a record'
                       ' of saved time entries',
                       type=str)
-  parser.add_argument('--video_dir',
-                      help='Directory for were to save downloaded'
-                      ' videos.',
-                      type=str)
-  parser.add_argument('--low_quality',
-                      help='Download lowest quality videos.',
+  parser.add_argument('--new_downloads_path', type=str,
+                      help='Path to textfile containing all newly downloaded'
+                      ' videos.')
+  parser.add_argument('--video_dir', help='Directory for were to save'
+                      ' downloaded videos.', type=str)
+  parser.add_argument('--low_quality', help='Download lowest quality videos.',
                       action='store_true')
 
   args = parser.parse_args()
 
   truth = truthsaver.TruthSaver(
-      args.times_path, args.video_dir,
+      args.times_path, args.video_dir, args.new_downloads_path,
       args.update_only, args.try_all, args.low_quality)
 
   if not args.download_only:
