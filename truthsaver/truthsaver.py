@@ -380,7 +380,6 @@ class TruthSaver(object):
       if cur_entry_k not in self.saved_entries:
         self.saved_entries[cur_entry_k] = cur_entry_v
     self.save_entries(self.record_path, self.saved_entries)
-    self.save_downloaded_paths()
 
   def download_yt_video(self, yt_link, time_entry):
     """Downloads highest quality yt video given the link, and TimeEntry."""
@@ -444,7 +443,8 @@ class TruthSaver(object):
         self.saved_entries[time_entry.url] = (
             time_entry._replace(status=self.BAD_VIDEO))
         continue
-      except IOError:
+      except IOError as e:
+        logging.error(repr(e))
         continue
       else:
         self.saved_entries[time_entry.url] = (

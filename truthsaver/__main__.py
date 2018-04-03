@@ -47,6 +47,9 @@ def main():
   if not args.update_only:
     atexit.register(truth.save)
     truth.download_videos()
+  if args.new_downloads_path:
+    truth.save_downloaded_paths()
+
 
 if __name__ == '__main__':
   main()
