@@ -35,13 +35,17 @@ def main():
   args = parser.parse_args()
 
   truth = truthsaver.TruthSaver(
-      args.times_path, args.video_dir, args.new_downloads_path,
-      args.update_only, args.try_all, args.low_quality)
+      record_path=args.times_path,
+      video_root=args.video_dir,
+      new_times_path=args.new_downloads_path,
+      update_only=args.update_only,
+      try_all=args.try_all,
+      low_quality=args.low_quality)
 
   if not args.download_only:
     truth.update_download_list()
   if not args.update_only:
-    atexit.register(truth.save_entries)
+    atexit.register(truth.save)
     truth.download_videos()
 
 if __name__ == '__main__':

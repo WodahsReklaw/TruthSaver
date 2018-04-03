@@ -238,6 +238,9 @@ class TruthSaver(object):
       raise ValueError(
           'Valid file extensions must be .pkl or .json given %s' % ext)
 
+  def save(self):
+    self.save_entries(self.record_path, self.saved_entries)
+
   def save_downloaded_paths(self):
     """Saves all newly downloaded files if given a new_times_path."""
     if self.new_times_path:
