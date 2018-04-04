@@ -402,8 +402,8 @@ class TruthSaver(object):
       logging.error(str(e))
       logging.error('Skipping entry for now retry later')
       raise IOError
-    if self.newtimes_path:
-      self.newtimes_list.append(time_entry.vid_path())
+    if self.new_times_path:
+      self.new_times_list.append(time_entry.vid_path())
     logging.info('Downloaded video: %s', time_entry.vid_path())
 
   def download_videos(self):
